@@ -163,6 +163,15 @@ function getNoteClassName(i: number, total: number) {
   });
 }
 
+function checkWin(sudoku: State["sudoku"], errors: State["errors"]) {
+  for (let i = 0; i < 9; i++) {
+    for (let j = 0; j < 9; j++) {
+      if (typeof sudoku[i][j] !== "number" || errors[i][j]) return false;
+    }
+  }
+  return true;
+}
+
 function App({ sudoku: s }: { sudoku: number[][] }) {
   const [focusTile, setFocusTile] = useState<State["focusTile"]>(null);
   const [sudoku, setSudoku] = useState<State["sudoku"]>(
@@ -247,6 +256,9 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
           }
         }
         const errors = checkError(copy);
+        if (checkWin(copy, errors)) {
+          alert("You win!");
+        }
         setErrors((oldErrors) => {
           if (!pushed) {
             undoStack.current.push({
@@ -285,13 +297,41 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               <BigGrid key={i} id={i} />
             ))}
         </ul>
-        <button
-          onClick={() => setNotesMode((mode) => (mode + 1) % 3)}
-          className={classNames()}
-        >
-          notes:{" "}
-          {notesMode === 0 ? "off" : notesMode === 1 ? "corner" : "middle"}
-        </button>
+        <div className="flex mt-1 gap-2 flex-wrap justify-center">
+          <button
+            className={classNames(
+              notesMode === 0
+                ? "bg-blue-400 text-blue-100"
+                : "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => setNotesMode(0)}
+          >
+            Number
+          </button>
+          <button
+            className={classNames(
+              notesMode === 1
+                ? "bg-blue-400 text-blue-100"
+                : "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => setNotesMode(1)}
+          >
+            Corner Notes
+          </button>
+          <button
+            className={classNames(
+              notesMode === 2
+                ? "bg-blue-400 text-blue-100"
+                : "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => setNotesMode(2)}
+          >
+            Center Notes
+          </button>
+        </div>
       </div>
     </SudokuContext.Provider>
   );
