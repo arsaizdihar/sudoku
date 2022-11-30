@@ -1,4 +1,6 @@
 import classNames from "classnames";
+import { GetServerSidePropsContext } from "next";
+import { useRouter } from "next/router";
 import React, { useEffect, useRef, useState } from "react";
 import generator from "../src/generator";
 
@@ -7,10 +9,18 @@ type Notes = {
   m: Array<number>;
 };
 
+const difficulties = [
+  { name: "Easy", value: 0 },
+  { name: "Medium", value: 1 },
+  { name: "Hard", value: 2 },
+  { name: "Expert", value: 3 },
+];
+
 type State = {
   sudoku: (number | Notes)[][];
   focusTile: null | [number, number];
   errors: boolean[][];
+  counts: Array<number>;
 };
 
 const SudokuContext = React.createContext<{
@@ -21,12 +31,16 @@ const SudokuContext = React.createContext<{
   errors: State["errors"];
   setErrors: React.Dispatch<React.SetStateAction<State["errors"]>>;
   mutable: boolean[][];
+  focusRef: React.MutableRefObject<State["focusTile"]>;
 }>(null as unknown as any);
 
 const useSudoku = () => React.useContext(SudokuContext);
 
-export const getServerSideProps = async () => {
-  const { puzzle } = generator.getGame();
+export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
+  const level = [28, 37, 45, 60];
+  let dif = Number(ctx.query.dif);
+  if (isNaN(dif) || dif < 0 || dif > 3) dif = 1;
+  const { puzzle } = generator.getGame(level[dif]);
   const sudoku = Array.from({ length: 9 }, (_, i) => Array(9).fill(0));
   for (let i = 0; i < 9; i++) {
     for (let j = 0; j < 9; j++) {
@@ -173,16 +187,41 @@ function checkWin(sudoku: State["sudoku"], errors: State["errors"]) {
 }
 
 function App({ sudoku: s }: { sudoku: number[][] }) {
+  const router = useRouter();
+  let dif = Number(router.query.dif);
+  if (isNaN(dif) || dif < 0 || dif > 3) dif = 1;
   const [focusTile, setFocusTile] = useState<State["focusTile"]>(null);
   const [sudoku, setSudoku] = useState<State["sudoku"]>(
     s.map((row) => row.map((value) => (value ? value : { c: [], m: [] })))
   );
+  const [counts, setCounts] = useState([0, 0, 0, 0, 0, 0, 0, 0, 0]);
   const [errors, setErrors] = useState(Array(9).fill(Array(9).fill(false)));
   const [notesMode, setNotesMode] = useState(0);
   const undoStack = useRef<State[]>([]);
-  const mutable = useRef(
-    sudoku.map((row) => row.map((v) => typeof v !== "number"))
-  );
+  const focusRef = useRef<State["focusTile"]>(null);
+  const mutable = useRef(Array(9).fill(Array(9).fill(false)));
+
+  useEffect(() => {
+    const sudoku = s.map((row) =>
+      row.map((value) => (value ? value : { c: [], m: [] }))
+    );
+    setSudoku(sudoku);
+    setFocusTile(null);
+    focusRef.current = null;
+    mutable.current = sudoku.map((row) =>
+      row.map((v) => typeof v !== "number")
+    );
+    undoStack.current = [];
+    const counts = Array(9).fill(0);
+    for (let i = 0; i < 9; i++) {
+      for (let j = 0; j < 9; j++) {
+        if (s[i][j] !== 0) {
+          counts[s[i][j] - 1]++;
+        }
+      }
+    }
+    setCounts(counts);
+  }, [s]);
 
   useEffect(() => {
     function listener(event: KeyboardEvent) {
@@ -193,6 +232,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
           setSudoku(last.sudoku);
           setFocusTile(last.focusTile);
           setErrors(last.errors);
+          setCounts(last.counts);
         }
       }
     }
@@ -202,17 +242,35 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
 
   useEffect(() => {
     function listener(event: KeyboardEvent) {
+      const focusTile = focusRef.current;
+      if (event.key === "a") {
+        setNotesMode(0);
+        return;
+      }
+      if (event.key === "s") {
+        setNotesMode(1);
+        return;
+      }
+      if (event.key === "d") {
+        setNotesMode(2);
+        return;
+      }
+
       // check arrow keyboard
       if (focusTile) {
         const [i, j] = focusTile;
         if (event.key === "ArrowUp") {
           if (i > 0) setFocusTile([i - 1, j]);
+          return;
         } else if (event.key === "ArrowDown") {
           if (i < 8) setFocusTile([i + 1, j]);
+          return;
         } else if (event.key === "ArrowLeft") {
           if (j > 0) setFocusTile([i, j - 1]);
+          return;
         } else if (event.key === "ArrowRight") {
           if (j < 8) setFocusTile([i, j + 1]);
+          return;
         }
       }
       if (!focusTile || !mutable.current[focusTile[0]][focusTile[1]]) return;
@@ -236,6 +294,13 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         if (!isDelete && tile === input) return sudoku;
         const copy = getCopy(sudoku);
         if (isDelete) {
+          if (typeof tile === "number") {
+            setCounts((counts) => {
+              const copy = [...counts];
+              copy[tile - 1]--;
+              return copy;
+            });
+          }
           copy[row][col] = {
             c: [],
             m: [],
@@ -252,6 +317,11 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
             }
           } else {
             copy[row][col] = input;
+            setCounts((counts) => {
+              const copy = [...counts];
+              copy[input - 1]++;
+              return copy;
+            });
             updateNotes(copy, row, col);
           }
         }
@@ -265,6 +335,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               sudoku,
               focusTile,
               errors: oldErrors,
+              counts,
             });
             pushed = true;
           }
@@ -273,9 +344,9 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         return copy;
       });
     }
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, [focusTile, notesMode]);
+    window.addEventListener("keyup", listener);
+    return () => window.removeEventListener("keyup", listener);
+  }, [notesMode, counts]);
 
   return (
     <SudokuContext.Provider
@@ -287,6 +358,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         errors,
         setErrors,
         mutable: mutable.current,
+        focusRef,
       }}
     >
       <div className="w-full min-h-screen flex flex-col items-center justify-center max-w-screen-sm mx-auto border">
@@ -332,13 +404,45 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
             Center Notes
           </button>
         </div>
+        <div className="mt-2 grid grid-cols-9 gap-1 w-full max-w-sm">
+          {counts.map((count, i) => (
+            <div
+              key={i}
+              className={classNames(
+                "pb-1 flex flex-col items-center rounded relative text-blue-800 font-medium text-lg",
+                count === 9 ? "bg-gray-200" : "bg-blue-200"
+              )}
+            >
+              <span>{i + 1}</span>
+              <span className="text-xs text-gray-500">{count}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2">
+          <select
+            defaultValue={dif}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              if (val !== dif) {
+                router.push(`/?dif=${val}`);
+              }
+            }}
+          >
+            {difficulties.map((difficulty) => (
+              <option value={difficulty.value} key={difficulty.value}>
+                {difficulty.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </SudokuContext.Provider>
   );
 }
 
 function BigGrid({ id }: { id: number }) {
-  const { setFocusTile, sudoku, focusTile, errors, mutable } = useSudoku();
+  const { setFocusTile, sudoku, focusTile, errors, mutable, focusRef } =
+    useSudoku();
   return (
     <li className={classNames("border border-black")}>
       <ul className="grid grid-cols-3">
@@ -369,7 +473,10 @@ function BigGrid({ id }: { id: number }) {
                         : (focusTile[0] === row || focusTile[1] === col) &&
                           "bg-blue-50")
                   )}
-                  onClick={() => setFocusTile([row, col])}
+                  onClick={() => {
+                    focusRef.current = [row, col];
+                    setFocusTile([row, col]);
+                  }}
                 >
                   {typeof tile === "number" ? (
                     tile
