@@ -2,6 +2,7 @@ import classNames from "classnames";
 import { GetServerSidePropsContext } from "next";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import Clock from "../src/Clock";
 import generator from "../src/generator";
 
 type Notes = {
@@ -200,6 +201,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
   const undoStack = useRef<State[]>([]);
   const focusRef = useRef<State["focusTile"]>(null);
   const mutable = useRef(Array(9).fill(Array(9).fill(false)));
+  const [startTime, setStartTime] = useState(new Date());
 
   const onNumberClick = useCallback(
     (
@@ -301,6 +303,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
       }
     }
     setCounts(counts);
+    setStartTime(new Date());
   }, [s]);
 
   useEffect(() => {
@@ -376,6 +379,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
       }}
     >
       <div className="w-full min-h-screen flex flex-col items-center justify-center max-w-screen-sm mx-auto border">
+        <Clock start={startTime} />
         <ul className="grid grid-cols-3 w-full max-w-md box-content border border-black">
           {Array(9)
             .fill(0)
