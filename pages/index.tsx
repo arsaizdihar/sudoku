@@ -169,12 +169,12 @@ function getNoteClassName(i: number, total: number) {
   }
   const isRight = !isLeft && !isMid;
   return classNames("absolute text-xs text-gray-500", {
-    "top-0": isTop,
+    "top-[1px]": isTop,
     "top-1/2 -translate-y-1/2": isMiddle,
-    "bottom-0": isBottom,
-    "left-0": isLeft,
+    "bottom-[1px]": isBottom,
+    "left-[1px]": isLeft,
     "left-1/2 -translate-x-1/2": isMid,
-    "right-0": isRight,
+    "right-[1px]": isRight,
   });
 }
 
@@ -483,6 +483,9 @@ function BigGrid({ id }: { id: number }) {
             const tile = sudoku[row][col];
             const error = errors[row][col];
             const isMutable = mutable[row][col];
+            const focusNum = focusTile
+              ? sudoku[focusTile[0]][focusTile[1]]
+              : [];
             return (
               <li
                 key={i}
@@ -515,7 +518,12 @@ function BigGrid({ id }: { id: number }) {
                         {tile.c.map((n, i) => (
                           <span
                             key={i}
-                            className={getNoteClassName(i, tile.c.length)}
+                            className={classNames(
+                              getNoteClassName(i, tile.c.length),
+                              typeof focusNum === "number" &&
+                                focusNum === n &&
+                                "bg-blue-200 text-black"
+                            )}
                           >
                             {n}
                           </span>
@@ -523,7 +531,16 @@ function BigGrid({ id }: { id: number }) {
                       </div>
                       <div className="absolute inset-0 flex items-center justify-center gap-[1px] text-center text-xs text-gray-500">
                         {tile.m.map((n) => (
-                          <span key={n}>{n}</span>
+                          <span
+                            key={n}
+                            className={classNames(
+                              typeof focusNum === "number" &&
+                                focusNum === n &&
+                                "bg-blue-200 text-black"
+                            )}
+                          >
+                            {n}
+                          </span>
                         ))}
                       </div>
                     </>
