@@ -224,7 +224,7 @@ function createPuzzle(solution, n) {
 }
 
 export default {
-  getGame: (difficulty = level.easy) => {
+  getGame: (difficulty = level.medium) => {
     let solution = solve(randomPuzzle(81 - difficulty));
 
     while (!solved(solution)) {
