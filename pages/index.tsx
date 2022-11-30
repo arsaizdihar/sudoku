@@ -4,7 +4,17 @@ import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Clock from "../src/Clock";
 import generator from "../src/generator";
-
+import {
+  checkUnique,
+  makepuzzle,
+  ratepuzzle,
+  solveboard,
+  solvepuzzle,
+} from "../src/solver";
+makepuzzle;
+solvepuzzle;
+ratepuzzle;
+solveboard;
 type Notes = {
   c: Array<number>;
   m: Array<number>;
@@ -38,17 +48,40 @@ const SudokuContext = React.createContext<{
 const useSudoku = () => React.useContext(SudokuContext);
 
 export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
-  const level = [28, 37, 45, 60];
+  const level = [28, 37, 45, 56];
   let dif = Number(ctx.query.dif);
   if (isNaN(dif) || dif < 0 || dif > 3) dif = 1;
-  const { puzzle } = generator.getGame(level[dif]);
-  const sudoku = Array.from({ length: 9 }, (_, i) => Array(9).fill(0));
-  for (let i = 0; i < 9; i++) {
-    for (let j = 0; j < 9; j++) {
-      const key = `${String.fromCharCode(65 + i)}${j + 1}`;
-      sudoku[i][j] = Number(puzzle.get(key));
+  let missing = level[dif];
+  let sd = [];
+  let count = 0;
+  const sudoku = [];
+  do {
+    count++;
+    if (count > 5) missing--;
+    const { puzzle } = generator.getGame(missing);
+    sd = [];
+    for (let i = 0; i < 9; i++) {
+      for (let j = 0; j < 9; j++) {
+        const key = `${String.fromCharCode(65 + i)}${j + 1}`;
+        let val: number | null = Number(puzzle.get(key)) - 1;
+        if (val === -1) {
+          val = null;
+        }
+        sd.push(val);
+      }
     }
+    if (checkUnique(sd)) break;
+  } while (true);
+
+  for (let i = 0; i < 9; i++) {
+    const row = [];
+    for (let j = 0; j < 9; j++) {
+      const val = sd[i * 9 + j];
+      row.push(val !== null ? val + 1 : null);
+    }
+    sudoku.push(row);
   }
+
   return {
     props: {
       sudoku,
@@ -176,6 +209,26 @@ function getNoteClassName(i: number, total: number) {
     "left-1/2 -translate-x-1/2": isMid,
     "right-[1px]": isRight,
   });
+}
+
+function autoNotate(sudoku: State["sudoku"]) {
+  const copy = getCopy(sudoku);
+  for (let i = 0; i < 9; i++) {
+    for (let j = 0; j < 9; j++) {
+      const tile = copy[i][j];
+      if (typeof tile === "number") continue;
+      tile.c = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+      tile.m = [];
+    }
+  }
+  for (let i = 0; i < 9; i++) {
+    for (let j = 0; j < 9; j++) {
+      const tile = copy[i][j];
+      if (typeof tile !== "number") continue;
+      updateNotes(copy, i, j);
+    }
+  }
+  return copy;
 }
 
 function checkWin(sudoku: State["sudoku"], errors: State["errors"]) {
@@ -429,6 +482,34 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
             onClick={() => onNumberClick({ isDelete: true })}
           >
             Erase
+          </button>
+          <button
+            className={classNames(
+              "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => {
+              const last = undoStack.current.pop();
+              if (last) {
+                setSudoku(last.sudoku);
+                setFocusTile(last.focusTile);
+                setErrors(last.errors);
+                setCounts(last.counts);
+              }
+            }}
+          >
+            Undo
+          </button>
+          <button
+            className={classNames(
+              "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => {
+              setSudoku((sudoku) => autoNotate(sudoku));
+            }}
+          >
+            Auto Notes
           </button>
         </div>
         <div className="mt-2 grid grid-cols-9 gap-1 w-full max-w-sm">

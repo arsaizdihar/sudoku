@@ -228,7 +228,7 @@ export default {
     let solution = solve(randomPuzzle(81 - difficulty));
 
     while (!solved(solution)) {
-      solution = solve(randomPuzzle());
+      solution = solve(randomPuzzle(81 - difficulty));
     }
 
     return {
