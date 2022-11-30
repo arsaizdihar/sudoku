@@ -1,7 +1,7 @@
 import classNames from "classnames";
 import { GetServerSidePropsContext } from "next";
 import { useRouter } from "next/router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import generator from "../src/generator";
 
 type Notes = {
@@ -201,6 +201,86 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
   const focusRef = useRef<State["focusTile"]>(null);
   const mutable = useRef(Array(9).fill(Array(9).fill(false)));
 
+  const onNumberClick = useCallback(
+    (
+      v:
+        | { num: number; isDelete?: boolean }
+        | { isDelete: boolean; num?: number }
+    ) => {
+      const focusTile = focusRef.current;
+      const isDelete = v.isDelete;
+      const input = v.num as number;
+      if (!focusTile || !mutable.current[focusTile[0]][focusTile[1]]) return;
+      const [row, col] = focusTile;
+      let pushed = false;
+
+      setSudoku((sudoku) => {
+        const tile = sudoku[row][col];
+        const answered = checkAnswered(tile);
+        if (notesMode !== 0 && !isDelete && answered) return sudoku;
+        if (
+          isDelete &&
+          typeof tile !== "number" &&
+          tile.c.length === 0 &&
+          tile.m.length === 0
+        )
+          return sudoku;
+        if (!isDelete && tile === input) return sudoku;
+        const copy = getCopy(sudoku);
+        if (isDelete) {
+          if (typeof tile === "number") {
+            setCounts((counts) => {
+              const copy = [...counts];
+              copy[tile - 1]--;
+              return copy;
+            });
+          }
+          copy[row][col] = {
+            c: [],
+            m: [],
+          };
+        } else {
+          if (notesMode !== 0) {
+            const tile = copy[row][col] as Notes;
+            const notes = notesMode === 1 ? tile.c : tile.m;
+            const idx = notes.indexOf(input);
+            if (idx !== -1) {
+              notes.splice(idx, 1);
+            } else {
+              pushOrdered(notes, input);
+            }
+          } else {
+            copy[row][col] = input;
+            setCounts((counts) => {
+              const copy = [...counts];
+              copy[input - 1]++;
+              return copy;
+            });
+            updateNotes(copy, row, col);
+          }
+        }
+        const errors = checkError(copy);
+        if (checkWin(copy, errors)) {
+          alert("You win!");
+        }
+        setErrors((oldErrors) => {
+          if (!pushed) {
+            undoStack.current.push({
+              sudoku,
+              focusTile,
+              errors: oldErrors,
+              counts,
+            });
+            pushed = true;
+          }
+          return errors;
+        });
+        return copy;
+      });
+    },
+    [notesMode, counts]
+  );
+
   useEffect(() => {
     const sudoku = s.map((row) =>
       row.map((value) => (value ? value : { c: [], m: [] }))
@@ -273,80 +353,14 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
           return;
         }
       }
-      if (!focusTile || !mutable.current[focusTile[0]][focusTile[1]]) return;
       const isDelete = event.key === "Backspace" || event.key === "Delete";
       const input = Number(event.key);
       if (!isDelete && (input < 1 || input > 9 || isNaN(input))) return;
-      const [row, col] = focusTile;
-      let pushed = false;
-
-      setSudoku((sudoku) => {
-        const tile = sudoku[row][col];
-        const answered = checkAnswered(tile);
-        if (notesMode !== 0 && !isDelete && answered) return sudoku;
-        if (
-          isDelete &&
-          typeof tile !== "number" &&
-          tile.c.length === 0 &&
-          tile.m.length === 0
-        )
-          return sudoku;
-        if (!isDelete && tile === input) return sudoku;
-        const copy = getCopy(sudoku);
-        if (isDelete) {
-          if (typeof tile === "number") {
-            setCounts((counts) => {
-              const copy = [...counts];
-              copy[tile - 1]--;
-              return copy;
-            });
-          }
-          copy[row][col] = {
-            c: [],
-            m: [],
-          };
-        } else {
-          if (notesMode !== 0) {
-            const tile = copy[row][col] as Notes;
-            const notes = notesMode === 1 ? tile.c : tile.m;
-            const idx = notes.indexOf(input);
-            if (idx !== -1) {
-              notes.splice(idx, 1);
-            } else {
-              pushOrdered(notes, input);
-            }
-          } else {
-            copy[row][col] = input;
-            setCounts((counts) => {
-              const copy = [...counts];
-              copy[input - 1]++;
-              return copy;
-            });
-            updateNotes(copy, row, col);
-          }
-        }
-        const errors = checkError(copy);
-        if (checkWin(copy, errors)) {
-          alert("You win!");
-        }
-        setErrors((oldErrors) => {
-          if (!pushed) {
-            undoStack.current.push({
-              sudoku,
-              focusTile,
-              errors: oldErrors,
-              counts,
-            });
-            pushed = true;
-          }
-          return errors;
-        });
-        return copy;
-      });
+      onNumberClick({ isDelete, num: input });
     }
     window.addEventListener("keyup", listener);
     return () => window.removeEventListener("keyup", listener);
-  }, [notesMode, counts]);
+  }, [onNumberClick]);
 
   return (
     <SudokuContext.Provider
@@ -403,19 +417,30 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
           >
             Center Notes
           </button>
+          <button
+            className={classNames(
+              "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => onNumberClick({ isDelete: true })}
+          >
+            Erase
+          </button>
         </div>
         <div className="mt-2 grid grid-cols-9 gap-1 w-full max-w-sm">
           {counts.map((count, i) => (
-            <div
+            <button
               key={i}
               className={classNames(
-                "pb-1 flex flex-col items-center rounded relative text-blue-800 font-medium text-lg",
-                count === 9 ? "bg-gray-200" : "bg-blue-200"
+                "pb-1 flex flex-col items-center rounded relative text-blue-800 font-medium text-lg focus:outline-none",
+                count === 9 ? "bg-gray-200" : "bg-blue-200 hover:bg-blue-100"
               )}
+              onClick={() => onNumberClick({ num: i + 1 })}
+              disabled={count === 9}
             >
               <span>{i + 1}</span>
               <span className="text-xs text-gray-500">{count}</span>
-            </div>
+            </button>
           ))}
         </div>
         <div className="mt-2">
