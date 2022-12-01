@@ -1,8 +1,9 @@
 import classNames from "classnames";
 import { GetServerSidePropsContext } from "next";
 import { useRouter } from "next/router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Clock from "../src/Clock";
+import { SudokuContext, useSudoku } from "../src/Context";
 import generator from "../src/generator";
 import {
   checkUnique,
@@ -11,14 +12,22 @@ import {
   solveboard,
   solvepuzzle,
 } from "../src/solver";
+import { Notes, State } from "../src/type";
+import {
+  autoNotate,
+  checkAnswered,
+  checkError,
+  checkWin,
+  getCopy,
+  pushOrdered,
+  searchFirstNum,
+  updateCounts,
+  updateNotes,
+} from "../src/utils";
 makepuzzle;
 solvepuzzle;
 ratepuzzle;
 solveboard;
-type Notes = {
-  c: Array<number>;
-  m: Array<number>;
-};
 
 const difficulties = [
   { name: "Easy", value: 0 },
@@ -27,32 +36,8 @@ const difficulties = [
   { name: "Expert", value: 3 },
 ];
 
-type State = {
-  sudoku: (number | Notes)[][];
-  focusTile: null | [number, number];
-  errors: boolean[][];
-};
-
-const SudokuContext = React.createContext<{
-  sudoku: State["sudoku"];
-  setSudoku: React.Dispatch<React.SetStateAction<State["sudoku"]>>;
-  focusTile: State["focusTile"];
-  setFocusTile: React.Dispatch<React.SetStateAction<State["focusTile"]>>;
-  errors: State["errors"];
-  setErrors: React.Dispatch<React.SetStateAction<State["errors"]>>;
-  mutable: boolean[][];
-  focusRef: React.MutableRefObject<State["focusTile"]>;
-  lockNum: number | null;
-  setLockNum: React.Dispatch<React.SetStateAction<number | null>>;
-  onNumberClick: (
-    v: { num: number; isDelete?: boolean } | { isDelete: boolean; num?: number }
-  ) => void;
-}>(null as unknown as any);
-
-const useSudoku = () => React.useContext(SudokuContext);
-
 export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
-  const level = [28, 37, 45, 56];
+  const level = [28, 37, 45, 58];
   let dif = Number(ctx.query.dif);
   if (isNaN(dif) || dif < 0 || dif > 3) dif = 1;
   let missing = level[dif];
@@ -61,7 +46,7 @@ export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
   const sudoku = [];
   do {
     count++;
-    if (count > 5) missing--;
+    if (count > 10) missing--;
     const { puzzle } = generator.getGame(missing);
     sd = [];
     for (let i = 0; i < 9; i++) {
@@ -93,101 +78,6 @@ export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
   };
 };
 
-function checkError(sudoku: State["sudoku"]) {
-  const errors = Array.from({ length: 9 }, () => Array(9).fill(false));
-  for (let i = 0; i < 9; i++) {
-    for (let j = 0; j < 9; j++) {
-      if (typeof sudoku[i][j] !== "number") continue;
-      for (let k = 0; k < 9; k++) {
-        if (k === j) continue;
-        if (sudoku[i][j] === sudoku[i][k]) {
-          errors[i][j] = true;
-          errors[i][k] = true;
-        }
-      }
-      for (let k = 0; k < 9; k++) {
-        if (k === i) continue;
-        if (sudoku[i][j] === sudoku[k][j]) {
-          errors[i][j] = true;
-          errors[k][j] = true;
-        }
-      }
-      const x = Math.floor(i / 3) * 3;
-      const y = Math.floor(j / 3) * 3;
-      for (let k = x; k < x + 3; k++) {
-        for (let l = y; l < y + 3; l++) {
-          if (k === i && l === j) continue;
-          if (sudoku[i][j] === sudoku[k][l]) {
-            errors[i][j] = true;
-            errors[k][l] = true;
-          }
-        }
-      }
-    }
-  }
-  return errors;
-}
-
-function getCopy(sudoku: State["sudoku"]) {
-  return sudoku.map((row) =>
-    row.map((tile) =>
-      typeof tile === "number" ? tile : { c: [...tile.c], m: [...tile.m] }
-    )
-  );
-}
-
-function pushOrdered(arr: number[], n: number) {
-  let i = 0;
-  while (i < arr.length && arr[i] < n) i++;
-  arr.splice(i, 0, n);
-}
-
-function checkAnswered(value: any) {
-  return typeof value === "number";
-}
-
-function removeNotesByValue(notes: Notes, val: number) {
-  let idx = notes.c.indexOf(val);
-  if (idx !== -1) notes.c.splice(idx, 1);
-  idx = notes.m.indexOf(val);
-  if (idx !== -1) notes.m.splice(idx, 1);
-}
-
-function updateNotes(sudoku: State["sudoku"], i: number, j: number) {
-  const val = sudoku[i][j] as number;
-  const checked = new Set<string>();
-  // check horizontal
-  for (let k = 0; k < 9; k++) {
-    checked.add(`${i}${k}`);
-    let tile = sudoku[i][k];
-    if (typeof tile === "number") continue;
-    removeNotesByValue(tile, val);
-  }
-
-  // check vertical
-  for (let k = 0; k < 9; k++) {
-    const key = `${k}${j}`;
-    if (checked.has(key)) continue;
-    checked.add(key);
-    let tile = sudoku[k][j];
-    if (typeof tile === "number") continue;
-    removeNotesByValue(tile, val);
-  }
-
-  // check square
-  const x = Math.floor(i / 3) * 3;
-  const y = Math.floor(j / 3) * 3;
-  for (let k = x; k < x + 3; k++) {
-    for (let l = y; l < y + 3; l++) {
-      const key = `${k}${l}`;
-      if (checked.has(key)) continue;
-      let tile = sudoku[k][l];
-      if (typeof tile === "number") continue;
-      removeNotesByValue(tile, val);
-    }
-  }
-}
-
 function getNoteClassName(i: number, total: number) {
   const isTop = total > 4 ? i < 3 : i < 2;
   const isMiddle = !isTop && total > 6 && i > 2 && i < total - 3;
@@ -213,46 +103,6 @@ function getNoteClassName(i: number, total: number) {
     "left-1/2 -translate-x-1/2": isMid,
     "right-[1px]": isRight,
   });
-}
-
-function autoNotate(sudoku: State["sudoku"]) {
-  const copy = getCopy(sudoku);
-  for (let i = 0; i < 9; i++) {
-    for (let j = 0; j < 9; j++) {
-      const tile = copy[i][j];
-      if (typeof tile === "number") continue;
-      tile.c = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-      tile.m = [];
-    }
-  }
-  for (let i = 0; i < 9; i++) {
-    for (let j = 0; j < 9; j++) {
-      const tile = copy[i][j];
-      if (typeof tile !== "number") continue;
-      updateNotes(copy, i, j);
-    }
-  }
-  return copy;
-}
-
-function checkWin(sudoku: State["sudoku"], errors: State["errors"]) {
-  for (let i = 0; i < 9; i++) {
-    for (let j = 0; j < 9; j++) {
-      if (typeof sudoku[i][j] !== "number" || errors[i][j]) return false;
-    }
-  }
-  return true;
-}
-
-function updateCounts(sudoku: State["sudoku"]) {
-  const counts = new Array(9).fill(0);
-  for (let i = 0; i < 9; i++) {
-    for (let j = 0; j < 9; j++) {
-      const tile = sudoku[i][j];
-      if (typeof tile === "number") counts[tile - 1]++;
-    }
-  }
-  return counts;
 }
 
 function App({ sudoku: s }: { sudoku: number[][] }) {
@@ -453,6 +303,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         lockNum,
         setLockNum,
         onNumberClick,
+        notesMode,
       }}
     >
       <div className="w-full min-h-screen flex flex-col items-center justify-center max-w-screen-sm mx-auto border">
@@ -579,7 +430,14 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               )}
               onClick={() => {
                 if (lockNum !== null) {
-                  setLockNum(i + 1);
+                  if (lockNum !== i + 1) {
+                    const pos: any = searchFirstNum(sudoku, i + 1);
+                    if (pos) {
+                      setFocusTile(pos);
+                      focusRef.current = pos;
+                    }
+                    setLockNum(i + 1);
+                  }
                   return;
                 }
                 onNumberClick({ num: i + 1 });
@@ -624,6 +482,7 @@ function BigGrid({ id }: { id: number }) {
     lockNum,
     setLockNum,
     onNumberClick,
+    notesMode,
   } = useSudoku();
   return (
     <li className={classNames("border border-black")}>
@@ -671,8 +530,10 @@ function BigGrid({ id }: { id: number }) {
                     bgClass
                   )}
                   onClick={() => {
-                    focusRef.current = [row, col];
-                    setFocusTile([row, col]);
+                    if (!lockNum || notesMode === 0) {
+                      focusRef.current = [row, col];
+                      setFocusTile([row, col]);
+                    }
                     if (lockNum !== null) {
                       if (typeof tile !== "number") {
                         if (lockNum !== 0) onNumberClick({ num: lockNum });
