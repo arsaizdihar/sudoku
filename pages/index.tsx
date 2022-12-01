@@ -31,7 +31,6 @@ type State = {
   sudoku: (number | Notes)[][];
   focusTile: null | [number, number];
   errors: boolean[][];
-  counts: Array<number>;
 };
 
 const SudokuContext = React.createContext<{
@@ -43,6 +42,11 @@ const SudokuContext = React.createContext<{
   setErrors: React.Dispatch<React.SetStateAction<State["errors"]>>;
   mutable: boolean[][];
   focusRef: React.MutableRefObject<State["focusTile"]>;
+  lockNum: number | null;
+  setLockNum: React.Dispatch<React.SetStateAction<number | null>>;
+  onNumberClick: (
+    v: { num: number; isDelete?: boolean } | { isDelete: boolean; num?: number }
+  ) => void;
 }>(null as unknown as any);
 
 const useSudoku = () => React.useContext(SudokuContext);
@@ -240,6 +244,17 @@ function checkWin(sudoku: State["sudoku"], errors: State["errors"]) {
   return true;
 }
 
+function updateCounts(sudoku: State["sudoku"]) {
+  const counts = new Array(9).fill(0);
+  for (let i = 0; i < 9; i++) {
+    for (let j = 0; j < 9; j++) {
+      const tile = sudoku[i][j];
+      if (typeof tile === "number") counts[tile - 1]++;
+    }
+  }
+  return counts;
+}
+
 function App({ sudoku: s }: { sudoku: number[][] }) {
   const router = useRouter();
   let dif = Number(router.query.dif);
@@ -256,6 +271,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
   const mutable = useRef(Array(9).fill(Array(9).fill(false)));
   const [startTime, setStartTime] = useState(new Date());
   const [finished, setFinished] = useState(false);
+  const [lockNum, setLockNum] = useState<number | null>(null);
 
   const onNumberClick = useCallback(
     (
@@ -285,11 +301,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         const copy = getCopy(sudoku);
         if (isDelete) {
           if (typeof tile === "number") {
-            setCounts((counts) => {
-              const copy = [...counts];
-              copy[tile - 1]--;
-              return copy;
-            });
+            setCounts(updateCounts(copy));
           }
           copy[row][col] = {
             c: [],
@@ -308,11 +320,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
           } else {
             if (counts[input - 1] === 9) return sudoku;
             copy[row][col] = input;
-            setCounts((counts) => {
-              const copy = [...counts];
-              copy[input - 1]++;
-              return copy;
-            });
+            setCounts(updateCounts(copy));
             updateNotes(copy, row, col);
           }
         }
@@ -327,7 +335,6 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               sudoku,
               focusTile,
               errors: oldErrors,
-              counts,
             });
             pushed = true;
           }
@@ -338,6 +345,14 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
     },
     [notesMode, counts]
   );
+
+  useEffect(() => {
+    if (!lockNum) return;
+    if (counts[lockNum - 1] === 9) {
+      setLockNum(0);
+      return;
+    }
+  }, [counts, lockNum]);
 
   useEffect(() => {
     const sudoku = s.map((row) =>
@@ -360,9 +375,11 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
     }
     setCounts(counts);
     setStartTime(new Date());
+    setErrors(Array(9).fill(Array(9).fill(false)));
   }, [s]);
 
   useEffect(() => {
+    if (finished) return;
     function listener(event: KeyboardEvent) {
       // check ctrl+z
       if (event.ctrlKey && event.key === "z") {
@@ -370,14 +387,15 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         if (last) {
           setSudoku(last.sudoku);
           setFocusTile(last.focusTile);
+          focusRef.current = last.focusTile;
           setErrors(last.errors);
-          setCounts(last.counts);
+          setCounts(updateCounts(last.sudoku));
         }
       }
     }
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, []);
+  }, [finished]);
 
   useEffect(() => {
     function listener(event: KeyboardEvent) {
@@ -432,6 +450,9 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         setErrors,
         mutable: mutable.current,
         focusRef,
+        lockNum,
+        setLockNum,
+        onNumberClick,
       }}
     >
       <div className="w-full min-h-screen flex flex-col items-center justify-center max-w-screen-sm mx-auto border">
@@ -482,7 +503,10 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               "hover:bg-blue-300 text-blue-700",
               "border border-blue-500 rounded px-2 py-1 focus:outline-none"
             )}
-            onClick={() => onNumberClick({ isDelete: true })}
+            onClick={() => {
+              if (finished) return;
+              onNumberClick({ isDelete: true });
+            }}
           >
             Erase
           </button>
@@ -492,12 +516,13 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               "border border-blue-500 rounded px-2 py-1 focus:outline-none"
             )}
             onClick={() => {
+              if (finished) return;
               const last = undoStack.current.pop();
               if (last) {
                 setSudoku(last.sudoku);
                 setFocusTile(last.focusTile);
                 setErrors(last.errors);
-                setCounts(last.counts);
+                setCounts(updateCounts(last.sudoku));
               }
             }}
           >
@@ -514,16 +539,51 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
           >
             Auto Notes
           </button>
+          <button
+            className={classNames(
+              lockNum !== null
+                ? "bg-blue-400 text-blue-100"
+                : "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => {
+              // null if off, 0 if on but no number, 1-9 if on with number
+              if (lockNum !== null) {
+                setLockNum(null);
+                return;
+              }
+              const focusTile = focusRef.current;
+              if (focusTile) {
+                const [i, j] = focusTile;
+                const num = sudoku[i][j];
+                if (typeof num === "number") {
+                  setLockNum(num);
+                  return;
+                }
+              }
+              setLockNum(0);
+            }}
+          >
+            Lock Mode
+          </button>
         </div>
         <div className="mt-2 grid grid-cols-9 gap-1 w-full max-w-sm">
           {counts.map((count, i) => (
             <button
               key={i}
               className={classNames(
-                "pb-1 flex flex-col items-center rounded relative text-blue-800 font-medium text-lg focus:outline-none",
-                count === 9 ? "bg-gray-200" : "bg-blue-200 hover:bg-blue-100"
+                "pb-1 flex flex-col items-center rounded relative text-blue-800 font-medium text-lg focus:outline-none disabled:opacity-0",
+                lockNum !== null && lockNum !== i + 1
+                  ? "bg-gray-200 hover:bg-blue-200"
+                  : "bg-blue-200 hover:bg-blue-100"
               )}
-              onClick={() => onNumberClick({ num: i + 1 })}
+              onClick={() => {
+                if (lockNum !== null) {
+                  setLockNum(i + 1);
+                  return;
+                }
+                onNumberClick({ num: i + 1 });
+              }}
               disabled={count === 9}
             >
               <span>{i + 1}</span>
@@ -554,8 +614,17 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
 }
 
 function BigGrid({ id }: { id: number }) {
-  const { setFocusTile, sudoku, focusTile, errors, mutable, focusRef } =
-    useSudoku();
+  const {
+    setFocusTile,
+    sudoku,
+    focusTile,
+    errors,
+    mutable,
+    focusRef,
+    lockNum,
+    setLockNum,
+    onNumberClick,
+  } = useSudoku();
   return (
     <li className={classNames("border border-black")}>
       <ul className="grid grid-cols-3">
@@ -567,9 +636,29 @@ function BigGrid({ id }: { id: number }) {
             const tile = sudoku[row][col];
             const error = errors[row][col];
             const isMutable = mutable[row][col];
-            const focusNum = focusTile
-              ? sudoku[focusTile[0]][focusTile[1]]
-              : [];
+            const [y, x] = focusTile || [-1, -1];
+            const sameBlock =
+              Math.floor(y / 3) === Math.floor(row / 3) &&
+              Math.floor(x / 3) === Math.floor(col / 3);
+            const focus = focusTile ? sudoku[y][x] : null;
+            let focusNum: null | number = null;
+            if (lockNum) {
+              focusNum = lockNum;
+            } else {
+              focusNum = typeof focus === "number" ? focus : null;
+            }
+            let bgClass = "";
+            if (error) {
+              bgClass = "bg-red-200";
+            } else if (focusNum) {
+              if (tile === focusNum) {
+                bgClass = "bg-blue-100";
+              } else if (y === row || x === col || sameBlock) {
+                bgClass = "bg-blue-50";
+              }
+            } else if (focus && (y === row || x === col || sameBlock)) {
+              bgClass = "bg-blue-50";
+            }
             return (
               <li
                 key={i}
@@ -579,19 +668,18 @@ function BigGrid({ id }: { id: number }) {
                   className={classNames(
                     "h-full w-full flex justify-center items-center focus:outline-none font-medium relative",
                     !isMutable && "text-blue-600",
-                    error && "bg-red-200",
-                    !error &&
-                      focusTile &&
-                      ((focusTile[0] === row && focusTile[1] === col) ||
-                      (typeof tile === "number" &&
-                        tile === sudoku[focusTile[0]][focusTile[1]])
-                        ? "bg-blue-100"
-                        : (focusTile[0] === row || focusTile[1] === col) &&
-                          "bg-blue-50")
+                    bgClass
                   )}
                   onClick={() => {
                     focusRef.current = [row, col];
                     setFocusTile([row, col]);
+                    if (lockNum !== null) {
+                      if (typeof tile !== "number") {
+                        if (lockNum !== 0) onNumberClick({ num: lockNum });
+                      } else {
+                        setLockNum(tile);
+                      }
+                    }
                   }}
                 >
                   {typeof tile === "number" ? (
