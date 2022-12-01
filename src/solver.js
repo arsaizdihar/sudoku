@@ -88,16 +88,21 @@ function checkUnique(original) {
   if (guesses === null) {
     return true;
   }
+
   let count = 0;
-  guesses.forEach((guess) => {
+  let validWorkspace = [];
+  for (let i = 0; i < guesses.length; i++) {
+    const guess = guesses[i];
     let workspace = [].concat(board);
     workspace[guess.pos] = guess.num;
-    let result = checkUnique(workspace);
-    if (result) {
+    if (solvepuzzle(workspace)) {
       count++;
+      validWorkspace = workspace;
     }
-  });
-  return count === 1;
+  }
+
+  if (count !== 1) return false;
+  return checkUnique(validWorkspace);
 }
 
 function solveboard(original) {
