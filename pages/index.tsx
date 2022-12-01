@@ -306,6 +306,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               pushOrdered(notes, input);
             }
           } else {
+            if (counts[input - 1] === 9) return sudoku;
             copy[row][col] = input;
             setCounts((counts) => {
               const copy = [...counts];
@@ -526,7 +527,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
               disabled={count === 9}
             >
               <span>{i + 1}</span>
-              <span className="text-xs text-gray-500">{count}</span>
+              <span className="text-xs text-gray-500">{9 - count}</span>
             </button>
           ))}
         </div>
