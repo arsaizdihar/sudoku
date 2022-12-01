@@ -95,9 +95,6 @@ function checkUnique(original) {
     let result = checkUnique(workspace);
     if (result) {
       count++;
-      if (count > 1) {
-        return false;
-      }
     }
   });
   return count === 1;

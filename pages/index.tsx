@@ -255,6 +255,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
   const focusRef = useRef<State["focusTile"]>(null);
   const mutable = useRef(Array(9).fill(Array(9).fill(false)));
   const [startTime, setStartTime] = useState(new Date());
+  const [finished, setFinished] = useState(false);
 
   const onNumberClick = useCallback(
     (
@@ -316,6 +317,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
         }
         const errors = checkError(copy);
         if (checkWin(copy, errors)) {
+          setFinished(true);
           alert("You win!");
         }
         setErrors((oldErrors) => {
@@ -432,7 +434,7 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
       }}
     >
       <div className="w-full min-h-screen flex flex-col items-center justify-center max-w-screen-sm mx-auto border">
-        <Clock start={startTime} />
+        <Clock start={startTime} finished={finished} />
         <ul className="grid grid-cols-3 w-full max-w-md box-content border border-black">
           {Array(9)
             .fill(0)
