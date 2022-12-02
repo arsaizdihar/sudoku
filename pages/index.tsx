@@ -44,6 +44,7 @@ export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
   let sd = [];
   let count = 0;
   const sudoku = [];
+  let solution = [];
   do {
     count++;
     if (count > 10) missing--;
@@ -59,7 +60,8 @@ export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
         sd.push(val);
       }
     }
-    if (checkUnique(sd)) break;
+    solution = checkUnique(sd);
+    if (solution) break;
   } while (true);
 
   for (let i = 0; i < 9; i++) {
@@ -71,9 +73,21 @@ export const getServerSideProps = async (ctx: GetServerSidePropsContext) => {
     sudoku.push(row);
   }
 
+  const sol = [];
+
+  for (let i = 0; i < 9; i++) {
+    const row = [];
+    for (let j = 0; j < 9; j++) {
+      const val = solution[i * 9 + j];
+      row.push(val !== null ? val + 1 : null);
+    }
+    sol.push(row);
+  }
+
   return {
     props: {
       sudoku,
+      solution: sol,
     },
   };
 };
@@ -105,7 +119,13 @@ function getNoteClassName(i: number, total: number) {
   });
 }
 
-function App({ sudoku: s }: { sudoku: number[][] }) {
+function App({
+  sudoku: s,
+  solution,
+}: {
+  sudoku: number[][];
+  solution: number[][];
+}) {
   const router = useRouter();
   let dif = Number(router.query.dif);
   if (isNaN(dif) || dif < 0 || dif > 3) dif = 1;
@@ -396,6 +416,29 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
             }}
           >
             Auto Notes
+          </button>
+          <button
+            className={classNames(
+              "hover:bg-blue-300 text-blue-700",
+              "border border-blue-500 rounded px-2 py-1 focus:outline-none"
+            )}
+            onClick={() => {
+              const errors: boolean[][] = Array.from({ length: 9 }, () =>
+                Array(9).fill(false)
+              );
+              for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                  const tile = sudoku[i][j];
+                  if (typeof tile !== "number") continue;
+                  if (tile !== solution[i][j]) {
+                    errors[i][j] = true;
+                  }
+                }
+              }
+              setErrors(errors);
+            }}
+          >
+            Check Solution
           </button>
           <button
             className={classNames(

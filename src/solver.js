@@ -86,7 +86,7 @@ function checkUnique(original) {
   let board = [].concat(original);
   let guesses = deduce(board);
   if (guesses === null) {
-    return true;
+    return board;
   }
 
   let count = 0;
@@ -101,7 +101,7 @@ function checkUnique(original) {
     }
   }
 
-  if (count !== 1) return false;
+  if (count !== 1) return null;
   return checkUnique(validWorkspace);
 }
 
