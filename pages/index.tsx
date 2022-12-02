@@ -280,11 +280,21 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
       const isDelete = event.key === "Backspace" || event.key === "Delete";
       const input = Number(event.key);
       if (!isDelete && (input < 1 || input > 9 || isNaN(input))) return;
+      if (!isDelete && lockNum) {
+        if (counts[input - 1] === 9) return;
+        setLockNum(input);
+        const pos: any = searchFirstNum(sudoku, input);
+        if (pos) {
+          setFocusTile(pos);
+          focusRef.current = pos;
+        }
+        return;
+      }
       onNumberClick({ isDelete, num: input });
     }
     window.addEventListener("keyup", listener);
     return () => window.removeEventListener("keyup", listener);
-  }, [onNumberClick]);
+  }, [onNumberClick, sudoku]);
 
   return (
     <SudokuContext.Provider
