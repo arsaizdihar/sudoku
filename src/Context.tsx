@@ -12,9 +12,11 @@ export const SudokuContext = React.createContext<{
   focusRef: React.MutableRefObject<State["focusTile"]>;
   lockNum: number | null;
   setLockNum: React.Dispatch<React.SetStateAction<number | null>>;
-  onNumberClick: (
-    v: { num: number; isDelete?: boolean } | { isDelete: boolean; num?: number }
-  ) => void;
+  onNumberClick: (v: {
+    num?: number;
+    isDelete?: boolean;
+    pos?: [number, number];
+  }) => void;
   notesMode: number;
 }>(null as unknown as any);
 

@@ -124,16 +124,13 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
   const [lockNum, setLockNum] = useState<number | null>(null);
 
   const onNumberClick = useCallback(
-    (
-      v:
-        | { num: number; isDelete?: boolean }
-        | { isDelete: boolean; num?: number }
-    ) => {
+    (v: { num?: number; isDelete?: boolean; pos?: [number, number] }) => {
       const focusTile = focusRef.current;
+      const pos = v.pos || focusTile;
       const isDelete = v.isDelete;
       const input = v.num as number;
-      if (!focusTile || !mutable.current[focusTile[0]][focusTile[1]]) return;
-      const [row, col] = focusTile;
+      if (!pos || !mutable.current[pos[0]][pos[1]]) return;
+      const [row, col] = pos;
       let pushed = false;
 
       setSudoku((sudoku) => {
@@ -437,8 +434,8 @@ function App({ sudoku: s }: { sudoku: number[][] }) {
                       focusRef.current = pos;
                     }
                     setLockNum(i + 1);
+                    return;
                   }
-                  return;
                 }
                 onNumberClick({ num: i + 1 });
               }}
@@ -536,7 +533,8 @@ function BigGrid({ id }: { id: number }) {
                     }
                     if (lockNum !== null) {
                       if (typeof tile !== "number") {
-                        if (lockNum !== 0) onNumberClick({ num: lockNum });
+                        if (lockNum !== 0)
+                          onNumberClick({ num: lockNum, pos: [row, col] });
                       } else {
                         setLockNum(tile);
                       }
